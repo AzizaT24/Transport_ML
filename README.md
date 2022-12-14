@@ -10,7 +10,10 @@ Distance              0.024766
 Destination city_cat  0.010836
 
 Confusion matrix of the transportation days, the most common is 1 day of transportation from the origin to destination. 
-
+[[ 76   0   0   0]
+ [  0 640   0   0]
+ [  0   0  26   0]
+ [  0   0   0 126]]
 ![image](https://user-images.githubusercontent.com/120400018/207592963-13f0537e-494f-45b2-91ab-f5f5c93ffeaa.png)
 
 Actual and Predicted values per Carrier. 
