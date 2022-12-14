@@ -1,0 +1,94 @@
+import pandas as pd
+import numpy as np
+from numpy import mean, median, sin, cos, sqrt, arctan2, radians, std, radians
+from datetime import date
+
+train_data = pd.read_excel('dummy_source.xlsx',index_col= False)
+
+origin_codes = pd.read_excel ('origin_distances_vlook.xlsx',index_col= False)
+destn_codes = pd.read_excel ('destin_distances_vlook.xlsx',index_col= False)
+
+train_data['Origin city'] = train_data['Origin city'].str.lower()
+train_data['Destination city'] = train_data['Destination city'].str.lower()
+train_data['Destination country'] = train_data['Destination country'].str.lower()
+train_data['Origin country'] = train_data['Origin country'].str.lower()
+
+origin_codes['Origin city'] = origin_codes['Origin city'].str.lower()
+destn_codes['Destination city'] = destn_codes['Destination city'].str.lower()
+origin_codes['origin iso2'] = origin_codes['origin iso2'].str.lower()
+destn_codes['destin iso2'] = destn_codes['destin iso2'].str.lower()
+pickupweekdayUSoff = (train_data['Shipment actual pick up date'])
+
+train_data['Pickup Workday'] = pickupweekdayUSoff.dt.weekday
+
+
+conditions_workday_pickUSoff= [
+   (train_data['Pickup Workday']==0), 
+   (train_data['Pickup Workday']== 1),
+   (train_data['Pickup Workday']== 2),
+   (train_data['Pickup Workday'] == 3),
+   (train_data['Pickup Workday'] == 4),
+   (train_data['Pickup Workday'] == 5),
+   (train_data['Pickup Workday'] == 6)]
+choices_workdayUSoff = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+train_data['Pickup Day'] = np.select(conditions_workday_pickUSoff, choices_workdayUSoff, default= 'Not enough data')
+
+
+delivUSoff = (train_data['Shipment actual delivery date'])
+train_data['Delivery Workday'] = delivUSoff.dt.weekday
+
+
+conditions_workdayUSoff= [
+   (train_data['Delivery Workday']==0), 
+   (train_data['Delivery Workday']== 1),
+   (train_data['Delivery Workday']== 2),
+   (train_data['Delivery Workday'] == 3),
+   (train_data['Delivery Workday'] == 4),
+   (train_data['Delivery Workday'] == 5),
+   (train_data['Delivery Workday'] == 6)]
+choices_workdayUSoff = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+train_data['Delivery Day'] = np.select(conditions_workdayUSoff, choices_workdayUSoff, default= 'Not enough data')
+
+
+#getting the difference between the planned and actual shipment dates in order to identify for how many days shipments were devlivered or picked up late
+
+train_data['Delivery Day difference']= train_data['Shipment planned delivery date'] - train_data['Shipment actual delivery date']
+train_data['Pickup Day difference'] = train_data['Shipment planned pick up date'] - train_data['Shipment actual pick up date']
+
+train_data['Pickup Day difference'] = train_data['Pickup Day difference'].dt.round('1D')
+train_data['Delivery Day difference'] =train_data['Delivery Day difference'].dt.round('1D')
+
+train_data['Pickup Day difference'] = train_data['Pickup Day difference'].astype(str)
+train_data['Delivery Day difference'] = train_data['Delivery Day difference'].astype(str)
+
+#vlookup the longtitudes and latitudes from the open source database
+
+train_data= pd.merge(train_data, 
+                     origin_codes, 
+                     left_on =['Origin city','Origin country'], 
+                     right_on=['Origin city', 'origin iso2'],
+                     how ='inner')
+
+train_data= pd.merge(train_data, 
+                     destn_codes, 
+                     left_on =['Destination city','Destination country'], 
+                     right_on=['Destination city', 'destin iso2'],
+                     how ='inner')
+                     
+#calculate the distance between origin and destination cities, using Haversine formula
+train_data['destin lat'] = radians(train_data['destin lat'])
+train_data['destin lng'] = radians(train_data['destin lng'])
+train_data['origin lat'] = radians(train_data['origin lat'])
+train_data['origin lng'] = radians(train_data['origin lng'])
+
+train_data['dLat']=train_data['destin lat']-train_data['origin lat']
+train_data['dLng']=train_data['destin lng']-train_data['origin lng']
+R = 6373
+
+train_data['a'] = sin(train_data['dLat']/2)**2 + cos(train_data['destin lat']) * cos(train_data['origin lat']) * sin(train_data['dLng']/2)**2
+
+train_data['c'] = 2 * arctan2(sqrt(train_data['a']), sqrt(1-train_data['a']))
+train_data['Distance'] = R*train_data['c']
+
+
+train_data.to_excel('Trained_data.xlsx',sheet_name='Sheet_name_1',index=None)
