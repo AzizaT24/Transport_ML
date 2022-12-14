@@ -1,0 +1,153 @@
+import pandas as pd
+import numpy as np
+from numpy import mean, median,std,select, percentile,corrcoef, round
+
+
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.ensemble import RandomForestClassifier
+
+import matplotlib.pyplot as plt
+import seaborn as sn
+from datetime import date
+
+train_data = pd.read_excel('dummy_data.xlsx',index_col= False)
+
+
+
+train_data['Distance'].fillna('NaN', inplace = True)
+
+train_data.drop(train_data[train_data['Distance']=='NaN'].index, inplace=True)
+train_data["Transport_actual_days"]=(pd.to_datetime(train_data["Shipment actual delivery date"])- pd.to_datetime(train_data["Shipment actual pick up date"])).astype('timedelta64[D]')
+
+#removing invalid data, like -1 day difference from actual delivery date from actual pickup date. 
+train_data.drop(train_data[train_data['Transport_actual_days']<0].index, inplace=True)
+#train_data=pd.concat((train_data, pd.get_dummies(train_data['Shipment actual pick up date'].dt.day_name())), axis=1)
+
+#Calculate interquartile range
+
+# converting type of columns to 'category'
+train_data['Carrier name'] = train_data['Carrier name'].astype('category')
+
+# Assigning numerical values and storing in another column
+train_data['Carrier name_Cat'] = train_data['Carrier name'].cat.codes
+
+train_data["Pickup Day"] = train_data["Pickup Day"].astype('category')
+train_data["Delivery Day"] = train_data["Delivery Day"].astype('category')
+train_data["Pickup Day_cat"] = train_data["Pickup Day"].cat.codes
+train_data["Delivery Day_cat"] = train_data["Delivery Day"].cat.codes
+train_data["Destination country"] = train_data["Destination country"].astype('category')
+train_data["Destination country_cat"] = train_data["Destination country"].cat.codes
+train_data["Destination city"] = train_data["Destination city"].astype('category')
+train_data["Destination city_cat"] = train_data["Destination city"].cat.codes
+
+#train_data.to_excel('diff-cat.xlsx', sheet_name='Sheet_name_1',index=None)
+
+cols = ["Transport_actual_days",'Distance']# The columns you want to search for outliers in
+
+# Calculate quantiles and IQR
+Q1 = train_data[cols].quantile(0.25) # Same as np.percentile but maps (0,1) and not (0,100)
+Q3 = train_data[cols].quantile(0.75)
+IQR = Q3 - Q1
+
+# Return a boolean array of the rows with (any) non-outlier column values
+condition = ~((train_data[cols] < (Q1 - 1.5 * IQR)) | (train_data[cols] > (Q3 + 1.5 * IQR))).any(axis=1)
+# Filter our dataframe based on condition
+train_data = train_data[condition]
+
+print(corrcoef(train_data['Distance'],train_data['Transport_actual_days']))
+
+
+train_data['Av per Carrier'] = round(train_data.groupby('Carrier name_Cat')['Transport_actual_days'].mean())
+train_data['Carr Min'] = train_data.groupby('Carrier name_Cat')['Transport_actual_days'].min()
+
+
+
+features = ["Destination city_cat",'Distance',"Delivery Day_cat", "Pickup Day_cat",'Carrier name_Cat']
+features = np.array(features)
+X= train_data.loc[:, features]
+labels = ['Transport_actual_days']
+labels = np.array(labels)
+y = train_data.loc[:, labels]
+
+
+training, testing, training_labels, testing_labels = train_test_split(X, y, test_size = .25, random_state = 42)
+print(testing.shape)
+
+# Normalize the data
+from sklearn.preprocessing import StandardScaler
+sc = StandardScaler()
+normed_train_data = pd.DataFrame(sc.fit_transform(training), columns = X.columns)
+normed_test_data = pd.DataFrame(sc.fit_transform(testing), columns = X.columns)
+
+clf=RandomForestClassifier(n_estimators = 1000, criterion = 'entropy', random_state = 0)
+clf.fit(training, training_labels.values.ravel())
+
+preds = clf.predict(testing)
+preds_train = clf.predict(training)
+
+normed_train_data['prediction'] =pd.Series([preds]) 
+
+print (preds)
+print (clf.score(training, training_labels))
+print(clf.score(testing, testing_labels))
+
+importance = pd.DataFrame(clf.feature_importances_, index=training.columns).sort_values(by=0, ascending=False)
+print (importance)
+
+def plot_confusion_matrix (conf_mat,title ='Confusion matrix', cmap = plt.cm.Blues):
+    plt.imshow (conf_mat, interpolation ='nearest', cmap = cmap)
+   
+    plt.title(title)
+    plt.colorbar()
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted')
+
+    np.set_printoptions(precision=2)
+    
+from sklearn.metrics import confusion_matrix
+conf_mat = confusion_matrix(testing_labels, preds)
+train_data['confusion matrix'] =pd.Series([conf_mat])
+print('Confusion matrix')
+print (conf_mat)
+plt.figure()
+plot_confusion_matrix(conf_mat)
+plt.show()
+
+
+
+# Dataframe with true values and dates
+
+carriers = train_data['Carrier name_Cat']
+true_data = pd.DataFrame(data = {'Carrier name_Cat': carriers, 'Transport_actual_days': train_data['Transport_actual_days']})
+
+
+pred_carriers = testing['Carrier name_Cat'].values
+
+predictions_data = pd.DataFrame(data = {'Carrier name_Cat': pred_carriers, 'prediction': preds})
+
+##plot true values
+plt.plot(true_data['Carrier name_Cat'], train_data['Transport_actual_days'], 'bd', label = 'Actual Delivery days')
+ #Plot the predicted values
+plt.plot(predictions_data['Carrier name_Cat'], predictions_data['prediction'], 'r+', label = 'prediction')
+
+plt.xlabel("Carrier")
+plt.ylabel('Transit Days')
+plt.title('Actual and Predicted Values')
+plt.legend()
+plt.show()
+
+df_m = predictions_data.groupby(['Carrier name_Cat','prediction']).size().unstack(level=0)
+
+
+
+sn.heatmap(df_m,  annot=True, fmt="", cmap="magma")
+plt.xlabel("Carrier")
+plt.ylabel('Transit Days')
+plt.title('Actual and Predicted Values')
+plt.show()
+
+
+train_data.to_excel('Origin_results.xlsx', sheet_name='Sheet_name_1',index=None) 
