@@ -15,3 +15,7 @@ Confusion matrix of the transportation days, the most common is 1 day of transpo
 
 Actual and Predicted values per Carrier. 
 ![image](https://user-images.githubusercontent.com/120400018/207593606-658292da-e9ba-47a5-81e0-ac08d4542dd3.png)
+
+
+The forest branches voting for the transit days. The carrier number 1 is most likely to delivery the goods in 1 day. 
+![image](https://user-images.githubusercontent.com/120400018/207594300-4fd1672e-d8de-4fd8-a8c4-468ea80073a3.png)
